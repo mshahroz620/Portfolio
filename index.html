@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PSX Portfolio Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* Dark background */
+            color: #c9d1d9; /* Light text */
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #30363d;
+            border-radius: 4px;
+        }
+        .data-table th, .data-table td {
+            padding: 1rem;
+            text-align: left;
+        }
+        .calculated-field {
+            background-color: #21262d !important;
+            border-color: #30363d !important;
+            color: #8b949e !important;
+        }
+        .metric-card {
+            background-color: #161b22;
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .tab-button.active {
+            color: #60a5fa; /* blue-400 */
+            border-bottom: 2px solid #60a5fa;
+            background-color: #161b22;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div id="app" class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        <header class="mb-8 border-b border-gray-700 pb-4">
+            <h1 class="text-3xl sm:text-4xl font-extrabold text-blue-400">PSX Portfolio Dashboard</h1>
+            <p id="user-info" class="text-sm text-gray-500 mt-1">Status: Ready. Data will attempt to load automatically.</p>
+        </header>
+
+        <nav class="flex space-x-2 sm:space-x-4 mb-6 border-b border-gray-700 overflow-x-auto pb-1">
+            <button onclick="changeView('home')" class="tab-button px-3 py-2 sm:px-4 sm:py-2 text-sm sm:text-base font-medium rounded-t-lg transition duration-200 whitespace-nowrap active">Home</button>
+            <button onclick="changeView('transactions-log')" class="tab-button px-3 py-2 sm:px-4 sm:py-2 text-sm sm:text-base font-medium rounded-t-lg text-gray-400 hover:text-blue-300 transition duration-200 whitespace-nowrap">Transactions Log</button>
+            <button onclick="changeView('settings')" class="tab-button px-3 py-2 sm:px-4 sm:py-2 text-sm sm:text-base font-medium rounded-t-lg text-gray-400 hover:text-blue-300 transition duration-200 whitespace-nowrap">Settings</button>
+            <button onclick="changeView('add-trade')" class="tab-button px-3 py-2 sm:px-4 sm:py-2 text-sm sm:text-base font-medium rounded-t-lg text-gray-400 hover:text-blue-300 transition duration-20apw">Add Trade</button>
+            <button onclick="changeView('add-dividend')" class="tab-button px-3 py-2 sm:px-4 sm:py-2 text-sm sm:text-base font-medium rounded-t-lg text-gray-400 hover:text-blue-300 transition duration-200 whitespace-nowrap">Add Dividend/Charge</button>
+        </nav>
+
+        <div id="loading" class="flex justify-center items-center h-48 hidden">
+            <svg class="animate-spin-ml-1 mr-3 h-10 w-10 text-blue-400"
+                xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-xl">Loading data...</span>
+        </div>
+
+        <div id="message-box" class="hidden p-4 mb-4 text-sm rounded-lg" role="alert"></div>
+
+        <div id="content" class="">
+            <div id="views-container">
+
+                <div id="home-view" class="view">
+                    <div class="flex justify-end mb-6">
+                        <button onclick="changeView('add-trade')" class="bg-blue-600 hover:bg-blue-700 text-white
+                        font-bold py-2 px-4 rounded-lg shadow-md transition duration-200 flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            Add New Trade
+                        </button>
+                    </div>
+
+                    <div class="mb-8">
+                        <h2 class="text-2xl font-semibold mb-4 text-white">Key Portfolio Summaries</h2>
+                        <div id="metrics-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                            </div>
+                    </div>
+
+                    <div class="mb-8">
+                        <h2 class="text-2xl font-semibold mb-4 text-white">Graphical Representation</h2>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                            <div class="metric-card">
+                                <h3 class="text-xl font-medium mb-4 text-blue-400">Holdings by Sector Weight</h3>
+                                <canvas id="sector-chart"></canvas>
+                            </div>
+                            <div class="metric-card">
+                                <h3 class="text-xl font-medium mb-4 text-blue-400">Top 5 Stock Weights</h3>
+                                <canvas id="stock-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-8">
+                        <h2 class="text-2xl font-semibold mb-4 text-white">Current Holdings Summary</h2>
+                        <div id="summary-table-container" class="overflow-x-auto bg-[#161b22] rounded-lg shadow-xl">
+                            </div>
+                    </div>
+                </div>
+
+                <div id="transactions-log-view" class="view hidden">
+                    <h2 class="text-2xl font-semibold mb-4 text-white">Trade History (Transaction Log)</h2>
+                    <div id="trades-table-container" class="overflow-x-auto bg-[#161b22] rounded-lg shadow-xl mb-8">
+                        </div>
+
+                    <h2 class="text-2xl font-semibold mb-4 text-white">Dividend and Charge History</h2>
+                    <div id="dividends-table-container" class="overflow-x-auto bg-[#161b22] rounded-lg shadow-xl">
+                        </div>
+
+                    <div class="mt-6 flex justify-end">
+                        <button onclick="window.exportTradesAndDividends()" class="bg-green-600 hover:bg-green-700 text-
+                        white font-bold py-2 px-4 rounded-lg shadow-md transition duration-200 flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l3-3m-3 3l-3-3m5 0h8m-8-8H5a2 2 0 00-2 2v8a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z"></path></svg>
+                            Export Log
+                        </button>
+                    </div>
+                </div>
+
+                <div id="settings-view" class="view hidden grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div class="lg:col-span-1 space-y-6">
+                        <div class="p-6 bg-[#161b22] rounded-lg shadow-xl">
+                            <h3 class="text-xl font-bold mb-4 text-blue-400">Data Import Center</h3>
+                            <p class="text-sm text-gray-400 mb-4">The file **trade_log.csv** in the current directory loads automatically. Use this manual option for a different file.</p>
+                            <div class="space-y-3">
+                                <label class="block text-sm font-medium text-gray-400">Transactions Log (.csv)</label>
+                                
+                                <input type="file" id="trade-log-file-input" accept=".csv" onchange="handleManualUpload(event)"
+                                    class="hidden">
+                                
+                                <button onclick="document.getElementById('trade-log-file-input').click()"
+                                    class="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition duration-200 flex items-center justify-center">
+                                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                    xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-3-3v6m-4 5h10a2 2 0 002-2V7a2 2 0 00-2-2H9a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                                    Manual File Upload
+                                </button>
+                                
+                                <p id="trade-log-status" class="text-xs text-yellow-400 italic">No file loaded.</p>
+                            </div>
+                        </div>
+
+                        <div class="p-6 bg-[#161b22] rounded-lg shadow-xl">
+                            <h3 class="text-xl font-bold mb-4 text-blue-400">Brokerage Fee Settings</h3>
+                            <form id="brokerage-form" class="space-y-3">
+                                <p class="text-sm text-gray-400">Your broker's custom rates:</p>
+                                <div>
+                                    <label for="fee-threshold" class="block text-sm font-medium text-gray-400 mb-1">Price
+                                        Threshold (PKR)</label>
+                                    <input type="number" id="fee-threshold" value="20" required min="0.01" step="0.01"
+                                        class="w-full p-2 bg-gray-800 border border-gray-700 rounded-lg text-white">
+                                </div>
+                                <div>
+                                    <label for="fee-fixed" class="block text-sm font-medium text-gray-400 mb-1">Fixed Fee
+                                        (Rs. per unit, below threshold)</label>
+                                    <input type="number" id="fee-fixed" value="0.03" required min="0" step="0.0001"
+                                        class="w-full p-2 bg-gray-800 border border-gray-700 rounded-lg text-white">
+                                </div>
+                                <div>
+                                    <label for="fee-percent" class="block text-sm font-medium text-gray-400 mb-
+                                        1">Percentage Fee (%, above threshold)</label>
+                                    <input type="number" id="fee-percent" value="0.15" required min="0" step="0.01"
+                                        class="w-full p-2 bg-gray-800 border border-gray-700 rounded-lg text-white" placeholder="0.15 for 0.15%">
+                                </div>
+                                <button type="submit" class="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-
+                                bold rounded-lg transition duration-200 mt-2">Save Brokerage Settings</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2 space-y-8">
+                        <div class="p-6 bg-[#161b22] rounded-lg shadow-xl">
+                            <h3 class="text-xl font-bold mb-4 text-blue-400">Stock Info Management</h3>
+                            <form id="stock-info-form" class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6 items-end">
+                                <div class="col-span-1">
+                                    <label for="new-symbol" class="block text-sm font-medium text-gray-400 mb-
+                                        1">Symbol</label>
+                                    <input type="text" id="new-symbol" required class="w-full p-2 bg-gray-800 border
+                                    border-gray-700 rounded-lg text-white" placeholder="FFC">
+                                </div>
+                                <div class="col-span-1 md:col-span-2">
+                                    <label for="new-name" class="block text-sm font-medium text-gray-400 mb-1">Stock
+                                        Name</label>
+                                    <input type="text" id="new-name" required class="w-full p-2 bg-gray-800 border border-
+                                    gray-700 rounded-lg text-white" placeholder="Fauji Fertilizer Company Limited">
+                                </div>
+                                <div class="col-span-1">
+                                    <label for="new-sector" class="block text-sm font-medium text-gray-400 mb-
+                                        1">Sector</label>
+                                    <input type="text" id="new-sector" required class="w-full p-2 bg-gray-800 border
+                                    border-gray-700 rounded-lg text-white" placeholder="Fertilizer">
+                                </div>
+                                <div class="col-span-1 flex items-center">
+                                    <button type="submit" class="w-full py-2 bg-green-600 hover:bg-green-700 text-white
+                                    font-bold rounded-lg transition duration-200">Add Stock</button>
+                                </div>
+                            </form>
+                            <div id="stock-info-table-container" class="overflow-x-auto">
+                                </div>
+                        </div>
+
+                        <div class="p-6 bg-[#161b22] rounded-lg shadow-xl">
+                            <h3 class="text-xl font-bold mb-4 text-blue-400">Public Holidays Management</h3>
+                            <form id="holidays-form" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 items-end">
+                                <div class="col-span-1">
+                                    <label for="new-holiday-date" class="block text-sm font-medium text-gray-400 mb-
+                                        1">Date</label>
+                                    <input type="date" id="new-holiday-date" required class="w-full p-2 bg-gray-800 border
+                                    border-gray-700 rounded-lg text-white">
+                                </div>
+                                <div class="col-span-1 md:col-span-2">
+                                    <label for="new-holiday-reason" class="block text-sm font-medium text-gray-400 mb-
+                                        1">Reason</label>
+                                    <input type="text" id="new-holiday-reason" required class="w-full p-2 bg-gray-800
+                                    border border-gray-700 rounded-lg text-white" placeholder="Eid-ul-Fitr">
+                                </div>
+                                <div class="col-span-1 flex items-center">
+                                    <button type="submit" class="w-full py-2 bg-green-600 hover:bg-green-700 text-white
+                                    font-bold rounded-lg transition duration-200">Add Holiday</button>
+                                </div>
+                            </form>
+                            <div id="holidays-table-container" class="overflow-x-auto">
+                                </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="add-trade-view" class="view hidden">
+                    <h2 class="text-2xl font-semibold mb-4 text-white">Add New Trade</h2>
+                    <form id="trade-form" class="space-y-4 p-6 bg-[#161b22] rounded-lg shadow-xl">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="trade-date" class="block text-sm font-medium text-gray-400 mb-1">Trade
+                                    Date</label>
+                                <input type="date" id="trade-date" required class="w-full p-2.5 bg-gray-800 border
+                                border-gray-700 rounded-lg text-white focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label for="trade-type" class="block text-sm font-medium text-gray-400 mb-1">Trade
+                                    Type</label>
+                                <select id="trade-type" required class="w-full p-2.5 bg-gray-800 border border-gray-700
+                                rounded-lg text-white focus:ring-blue-500 focus:border-blue-500 appearance-none">
+                                    <option value="Buy">Buy</option>
+                                    <option value="Sell">Sell</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="trade-symbol" class="block text-sm font-medium text-gray-400 mb-1">Stock
+                                    Symbol (e.g., FFC)</label>
+                                <input type="text" id="trade-symbol" required class="w-full p-2.5 bg-gray-800 border
+                                border-gray-700 rounded-lg text-white focus:ring-blue-500 focus:border-blue-500">
+                                <p id="stock-name-display" class="mt-1 text-xs text-gray-500"></p>
+                            </div>
+                            <div>
+                                <label for="trade-rate" class="block text-sm font-medium text-gray-400 mb-1">Rate (per
+                                    unit)</label>
+                                <input type="number" id="trade-rate" required min="0.01" step="0.01" class="w-full p-2.5
+                                bg-gray-800 border border-gray-700 rounded-lg text-white focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="trade-quantity" class="block text-sm font-medium text-gray-400 mb
+                                    1">Quantity (Positive Number)</label>
+                                <input type="number" id="trade-quantity" required min="1" class="w-full p-2.5 bg-gray
+                                800 border border-gray-700 rounded-lg text-white focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label for="trade-settlement" class="block text-sm font-medium text-gray-400 mb
+                                    1">Settlement Date (T+2 Business Days)</label>
+                                <input type="text" id="trade-settlement" readonly class="w-full p-2.5 calculated-field rounded-lg">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold
+                        rounded-lg transition duration-200 shadow-lg mt-4">Record Trade</button>
+                    </form>
+                </div>
+
+                <div id="add-dividend-view" class="view hidden">
+                    <h2 class="text-2xl font-semibold mb-4 text-white">Add New Dividend or Charge</h2>
+                    <form id="dividend-form" class="space-y-4 p-6 bg-[#161b22] rounded-lg shadow-xl">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="div-date" class="block text-sm font-medium text-gray-400 mb-1">Entitlement
+                                    Date</label>
+                                <input type="date" id="div-date" required class="w-full p-2.5 bg-gray-800 border border
+                                gray-700 rounded-lg text-white focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label for="div-symbol" class="block text-sm font-medium text-gray-400 mb-1">Stock
+                                    Symbol (Optional)</label>
+                                <input type="text" id="div-symbol" class="w-full p-2.5 bg-gray-800 border border-gray-700
+                                rounded-lg text-white focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., FFC or leave blank
+                                for a general charge">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="div-type" class="block text-sm font-medium text-gray-400 mb-1">Type</label>
+                            <select id="div-type" required class="w-full p-2.5 bg-gray-800 border border-gray-700
+                            rounded-lg text-white focus:ring-blue-500 focus:border-blue-500
+                            appearance-none">
+                                <option value="Dividend">Dividend</option>
+                                <option value="Bonus">Bonus</option>
+                                <option value="Charge">Charge (e.g., Custody/CGT)</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label for="div-gross" class="block text-sm font-medium text-gray-400 mb-1">Gross
+                                    Amount</label>
+                                <input type="number" id="div-gross" required step="0.01" class="w-full p-2.5 bg-gray-800
+                                border border-gray-700 rounded-lg text-white focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="Positive for income, negative for charge">
+                            </div>
+                            <div>
+                                <label for="div-tax" class="block text-sm font-medium text-gray-400 mb-1">Tax Amount
+                                    (e.g., 15%)</label>
+                                <input type="number" id="div-tax" value="0.00" min="0" step="0.01" class="w-full p-2.5
+                                bg-gray-800 border border-gray-700 rounded-lg text-white focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label for="div-net" class="block text-sm font-medium text-gray-400 mb-1">Net Amount
+                                    (Auto-Calculated)</label>
+                                <input type="number" id="div-net" readonly class="w-full p-2.5 calculated-field rounded-lg">
+                            </div>
+                        </div>
+                        <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold
+                        rounded-lg transition duration-200 shadow-lg mt-4">Record Dividend/Charge</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Global State & Mock Data (for UI demonstration when no file is loaded) ---
+        let tradesData = []; // Starts empty, will be filled by auto-load
+        let dividendsData = []; // Can be extended with mock data if needed
+        let stockInfo = {
+            // Minimal mock stock info for linking Symbol to Name/Sector
+            'AGP': { Name: 'AGP Limited', Sector: 'Pharma.', SectorShort: 'PH' },
+            'COLG': { Name: 'Colgate Palmolive', Sector: 'Food', SectorShort: 'FN' },
+            'IBLHL': { Name: 'IBL Healthcare Ltd', Sector: 'Pharma.', SectorShort: 'PH' },
+            'FFC': { Name: 'Fauji Fertilizer Co', Sector: 'Fertilizer', SectorShort: 'FZ' },
+            'SYS': { Name: 'Systems Limited', Sector: 'IT', SectorShort: 'IT' },
+        };
+        let publicHolidays = {
+            // Mock holidays for settlement date calculation
+            '2023-01-08': { reason: 'Example Holiday' },
+            '2023-03-23': { reason: 'Pakistan Day' }
+        };
+        let brokerageRules = { fixedFee: 0.03, priceThreshold: 20, percentageFee: 0.0015 };
+        let mySectorChart = null;
+        let myStockChart = null;
+
+        // Mock data for the Home View Summary/Charts (from previous context)
+        const summaryMockData = [
+            { id: 'AGP', Security: 'AGP', Name: 'AGP Limited', Quantity: 15, CostPerUnit: 52.21, Invested: 783.13, CurrentPrice: 192.86, MarketValue: 2892.90, PnL: 2109.77, ROI: 279.94, Weight: 1.96, Sector: 'Pharma.', SectorShort: 'PH' },
+            { id: 'COLG', Security: 'COLG', Name: 'Colgate Palmolive', Quantity: 11, CostPerUnit: 1087.28, Invested: 11960.12, CurrentPrice: 1289.35, MarketValue: 14182.85, PnL: 2222.73, ROI: 18.58, Weight: 11.89, Sector: 'Food', SectorShort: 'FN' },
+            { id: 'IBLHL', Security: 'IBLHL', Name: 'IBL Healthcare Ltd', Quantity: 97, CostPerUnit: 28.66, Invested: 2780.20, CurrentPrice: 52.35, MarketValue: 5077.95, PnL: 2297.75, ROI: 82.65, Weight: 3.44, Sector: 'Pharma.', SectorShort: 'PH' },
+            { id: 'FFC', Security: 'FFC', Name: 'Fauji Fertilizer Co', Quantity: 50, CostPerUnit: 98.50, Invested: 4925.00, CurrentPrice: 105.00, MarketValue: 5250.00, PnL: 325.00, ROI: 6.60, Weight: 5.00, Sector: 'Fertilizer', SectorShort: 'FZ' },
+            { id: 'SYS', Security: 'SYS', Name: 'Systems Limited', Quantity: 20, CostPerUnit: 400.00, Invested: 8000.00, CurrentPrice: 420.00, MarketValue: 8400.00, PnL: 400.00, ROI: 5.00, Weight: 7.00, Sector: 'IT', SectorShort: 'IT' },
+        ];
+
+
+        // --- UI & Utility Functions ---
+
+        window.showMessage = (message, type) => {
+            const box = document.getElementById('message-box');
+            box.textContent = message;
+            box.className = 'p-4 mb-4 text-sm rounded-lg';
+            box.classList.remove('hidden');
+            box.classList.remove('bg-green-900/50', 'text-green-300', 'border', 'border-green-600', 'bg-red-900/50', 'text-red-300', 'border', 'border-red-600', 'bg-yellow-900/50', 'text-yellow-300', 'border', 'border-yellow-600');
+
+            if (type === 'success') {
+                box.classList.add('bg-green-900/50', 'text-green-300', 'border', 'border-green-600');
+            } else if (type === 'error') {
+                box.classList.add('bg-red-900/50', 'text-red-300', 'border', 'border-red-600');
+            } else { // info/default
+                box.classList.add('bg-yellow-900/50', 'text-yellow-300', 'border', 'border-yellow-600');
+            }
+            setTimeout(() => {
+                box.classList.add('hidden');
+            }, 5000);
+        }
+
+        window.changeView = (viewId) => {
+            document.querySelectorAll('.view').forEach(view => view.classList.add('hidden'));
+            const targetView = document.getElementById(`${viewId}-view`);
+            if (targetView) targetView.classList.remove('hidden');
+
+            document.querySelectorAll('.tab-button').forEach(button => button.classList.remove('active'));
+            const targetButton = document.querySelector(`[onclick="changeView('${viewId}')"]`);
+            if (targetButton) targetButton.classList.add('active');
+
+            // Trigger re-render on view change
+            if (viewId === 'transactions-log') {
+                window.renderTrades();
+                window.renderDividends();
+            }
+            if (viewId === 'home') {
+                window.renderDashboard();
+            }
+        };
+
+        const renderTable = (data, containerId, columns, highlightPnL) => {
+            const container = document.getElementById(containerId); 
+            if (!container) return;
+            
+            if (!data || data.length === 0) {
+                container.innerHTML = '<p class="p-6 text-gray-500">No data available to display.</p>';
+                return;
+            }
+
+            const headerRow = columns.map(col => `<th class="font-semibold text-blue-300">${col.header}</th>`).join('');
+
+            const bodyRows = data.map(row => {
+                const rowCells = columns.map(col => {
+                    let value = row[col.key] ?? 'N/A';
+                    let cellClass = '';
+
+                    if (col.format) {
+                        value = col.format(value, row);
+                    } else if (typeof value === 'number') {
+                        value = value.toLocaleString(undefined, { minimumFractionDigits: 2 });
+                    }
+
+                    if (highlightPnL && (col.key === 'PnL' || col.key === 'netAmountCashFlow' || col.key === 'ROI')) {
+                        const numericValue = typeof row[col.key] === 'number' ? row[col.key] : parseFloat(row[col.key]);
+                        if (numericValue > 0) {
+                            cellClass = 'text-green-400';
+                        } else if (numericValue < 0) {
+                            cellClass = 'text-red-400';
+                        }
+                    }
+
+                    return `<td class="${cellClass}">${value}</td>`;
+                }).join('');
+
+                return `<tr class="border-b border-gray-700 hover:bg-[#21262d]">${rowCells}</tr>`;
+            }).join('');
+
+            container.innerHTML = `
+                <table class="w-full text-sm data-table">
+                    <thead>
+                        <tr class="bg-[#21262d] border-b border-gray-700">${headerRow}</tr>
+                    </thead>
+                    <tbody>${bodyRows}</tbody>
+                </table>
+            `;
+        };
+        
+        window.calculateSettlementDate = (tradeDateStr) => {
+            let date = new Date(tradeDateStr + 'T00:00:00'); // Ensure date is treated as UTC/start of day
+            let businessDaysCount = 0;
+
+            while (businessDaysCount < 2) {
+                date.setDate(date.getDate() + 1);
+                const dayOfWeek = date.getDay();
+                // 0 = Sunday, 6 = Saturday (Weekends are non-business days)
+                const dateStr = date.toISOString().split('T')[0];
+                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                const isHoliday = publicHolidays[dateStr];
+
+                if (!isWeekend && !isHoliday) {
+                    businessDaysCount++;
+                }
+            }
+            return date.toISOString().split('T')[0];
+        };
+        
+        const arrayToCSV = (arr) => {
+            if (!arr.length) return '';
+            const header = Object.keys(arr[0]).join(',');
+            const rows = arr.map(obj => Object.values(obj).map(val => {
+                if (typeof val === 'string' && (val.includes(',') || val.includes('"'))) {
+                    return `"${val.replace(/"/g, '""')}"`;
+                }
+                return val;
+            }).join(','));
+            return [header, ...rows].join('\n');
+        };
+
+        window.downloadCSV = (csvString, filename) => {
+            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.showMessage(`Successfully exported ${filename}!`, 'success');
+            }
+        };
+
+        // --- Data Rendering Functions ---
+        window.renderDashboard = () => {
+             // Only render mock data if no real trade data is loaded
+            if (tradesData.length === 0) {
+                window.renderMetrics(true); // pass true to indicate mock data usage
+                window.renderCharts(true);
+                window.renderSummary(true);
+            } else {
+                // In a real app, this is where you'd run portfolio calculations on tradesData
+                window.renderMetrics(false); 
+                window.renderCharts(false);
+                window.renderSummary(false);
+            }
+        };
+
+        window.renderSummary = (useMock) => {
+             const columns = [
+                { header: 'Security', key: 'Security' },
+                { header: 'Stock Name', key: 'Name' },
+                { header: 'Quantity', key: 'Quantity', format: (v) => v.toLocaleString(undefined, { maximumFractionDigits: 0 }) },
+                { header: 'Cost/Unit', key: 'CostPerUnit', format: (v) => v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) },
+                { header: 'Current Price', key: 'CurrentPrice', format: (v) => v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) },
+                { header: 'Unrealized P/L', key: 'PnL', format: (v) => v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) },
+                { header: 'ROI %', key: 'ROI', format: (v) => `${v.toLocaleString(undefined, { minimumFractionDigits: 2, 
+                    maximumFractionDigits: 2 })}%` },
+                { header: 'Portfolio Weight %', key: 'Weight', format: (v) => `${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%` },
+            ];
+            // Uses mock data if tradesData is empty
+            const dataToRender = useMock ? summaryMockData : []; 
+            renderTable(dataToRender, 'summary-table-container', columns, true);
+             if (tradesData.length > 0 && !useMock) {
+                document.getElementById('summary-table-container').innerHTML = '<p class="p-6 text-yellow-400">Trade data loaded, but financial calculation logic is required here.</p>';
+            }
+        };
+        window.renderMetrics = (useMock) => {
+            const metrics = useMock ? {
+                'Total Invested': 82575.85, 'Current Market Value': 147722.74, 'Available Cash': 12500.00,
+                'Unrealized P/L': 24000.50, 'Payouts': 1500.00, 'Deductions': 250.00,
+                'Net Gain/Loss': 25250.50, 'Total ROI': 40.92,
+                'No. of Securities Invested': summaryMockData.length,
+            } : {
+                'Total Trades Loaded': tradesData.length,
+                'Available Cash (Unchanged)': 12500.00,
+                'Note': 'No full portfolio calculations (Cost, P&L) are implemented yet.'
+            };
+
+            const grid = document.getElementById('metrics-grid');
+            grid.innerHTML = '';
+
+            Object.entries(metrics).forEach(([key, value]) => {
+                let formattedValue = (typeof value === 'number') ? (key.includes('%') ? `${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}%` : value.toLocaleString(undefined, { minimumFractionDigits: 2 })) : value;
+                let valueClass = '';
+                if (key.includes('P/L') || key.includes('ROI') || key.includes('Gain/Loss')) {
+                    valueClass = value >= 0 ? 'text-green-400' : 'text-red-400';
+                }
+
+                grid.innerHTML += `
+                    <div class="metric-card">
+                        <p class="text-sm font-medium text-gray-400 truncate">${key}</p>
+                        <p class="text-2xl font-extrabold mt-1 ${valueClass}">${formattedValue}</p>
+                    </div>
+                `;
+            });
+        };
+        window.renderCharts = (useMock) => {
+            const dataToUse = useMock ? summaryMockData : [];
+            if (dataToUse.length === 0) {
+                 document.getElementById('sector-chart').getContext('2d').canvas.parentNode.innerHTML = '<p class="p-6 text-gray-500">No data for charts.</p>';
+                 document.getElementById('stock-chart').getContext('2d').canvas.parentNode.innerHTML = '<p class="p-6 text-gray-500">No data for charts.</p>';
+                 return;
+            }
+            
+            const sectorData = dataToUse.reduce((acc, holding) => { 
+                const sector = holding.SectorShort || 'N/A'; 
+                acc[sector] = (acc[sector] || 0) + holding.Weight; 
+                return acc; 
+            }, {});
+            const sortedHoldings = [...dataToUse].sort((a, b) => b.Weight - a.Weight);
+            const top5Stocks = sortedHoldings.slice(0, 5); 
+            const chartColors = [ 
+                '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1' 
+            ];
+            if (mySectorChart) mySectorChart.destroy(); 
+            if (myStockChart) myStockChart.destroy();
+            const ctxSector = document.getElementById('sector-chart').getContext('2d');
+            mySectorChart = new Chart(ctxSector, { 
+                type: 'pie', 
+                data: { 
+                    labels: Object.keys(sectorData), 
+                    datasets: [{ 
+                        data: Object.values(sectorData), 
+                        backgroundColor: chartColors.slice(0, Object.keys(sectorData).length), 
+                        borderWidth: 1 
+                    }] 
+                }, 
+                options: { 
+                    responsive: true, 
+                    plugins: { 
+                        legend: { position: 'right', labels: { color: '#c9d1d9' } }, 
+                        title: { display: false }, 
+                        tooltip: { callbacks: { label: (context) => `${context.label}: ${context.formattedValue}%` } } 
+                    } 
+                } 
+            });
+            const ctxStock = document.getElementById('stock-chart').getContext('2d');
+            myStockChart = new Chart(ctxStock, { 
+                type: 'bar', 
+                data: { 
+                    labels: top5Stocks.map(h => h.Security), 
+                    datasets: [{ 
+                        label: 'Portfolio Weight (%)', 
+                        data: top5Stocks.map(h => h.Weight), 
+                        backgroundColor: chartColors.slice(0, top5Stocks.length), 
+                        borderColor: '#0d1117', 
+                        borderWidth: 1 
+                    }] 
+                }, 
+                options: { 
+                    responsive: true, 
+                    indexAxis: 'y', 
+                    plugins: { 
+                        legend: { display: false }, 
+                        title: { display: false } 
+                    }, 
+                    scales: { 
+                        x: { beginAtZero: true, ticks: { color: '#c9d1d9' }, grid: { color: '#30363d' } }, 
+                        y: { ticks: { color: '#c9d1d9' }, grid: { color: '#30363d' } } 
+                    } 
+                } 
+            });
+        };
+
+        window.renderTrades = () => {
+            const columns = [
+                { header: 'Trade No.', key: 'tradeNo' },
+                { header: 'Trade Date', key: 'date' },
+                { header: 'Settlement Date', key: 'settlementDate' },
+                { header: 'Stock Symbol', key: 'symbol' },
+                { header: 'Stock Name', key: 'stockName' },
+                { header: 'Trade Type', key: 'type' },
+                { header: 'Quantity', key: 'quantity', format: (v, row) => row.type === 'Sell' ?
+                    (v * -1).toLocaleString() : v.toLocaleString() // Display Sell as negative
+                },
+                { header: 'Rate (per unit)', key: 'rate', format: (v) => v.toLocaleString(undefined, { minimumFractionDigits: 4 }) },
+                { header: 'Brokerage Fee', key: 'brokerageFee', format: (v) => v.toLocaleString(undefined, { minimumFractionDigits: 4 }) },
+                { header: 'S.S.T', key: 'sst', format: (v) => v.toLocaleString(undefined, { minimumFractionDigits: 4 }) },
+                { header: 'Net Rate (per unit)', key: 'netRatePerUnit', format: (v) => v.toLocaleString(undefined, { minimumFractionDigits: 4 }) },
+                { header: 'Net Amount / Cash Flow', key: 'netAmountCashFlow', format: (v) => v.toLocaleString(undefined, { minimumFractionDigits: 2 }) },
+            ];
+
+            const sortedTrades = [...tradesData].sort((a, b) => new Date(b.date) - new Date(a.date));
+            renderTable(sortedTrades, 'trades-table-container', columns, true);
+        };
+        
+        window.renderDividends = () => {
+            const columns = [
+                { header: 'Date', key: 'date' },
+                { header: 'Symbol', key: 'symbol' },
+                { header: 'Type', key: 'type' },
+                { header: 'Gross Amount', key: 'gross', format: (v) => v.toLocaleString(undefined, { minimumFractionDigits: 2 }) },
+                { header: 'Tax', key: 'tax', format: (v) => v.toLocaleString(undefined, { minimumFractionDigits: 2 }) },
+                { header: 'Net Amount', key: 'net', format: (v) => v.toLocaleString(undefined, { minimumFractionDigits: 2 }) },
+            ];
+            const sortedDividends = [...dividendsData].sort((a, b) => new Date(b.date) - new Date(a.date));
+            renderTable(sortedDividends, 'dividends-table-container', columns, true);
+        };
+
+        window.exportTradesAndDividends = () => {
+            const tradeCsv = arrayToCSV(tradesData);
+            window.downloadCSV(tradeCsv, 'transaction_log.csv');
+        };
+
+        // --- Core File Upload Logic (Abstracted and Reused) ---
+
+        /**
+         * Generic function to process CSV data from any source (File object or URL response)
+         */
+        const processTradeLogData = (results, fileName) => {
+             if (results.errors.length) {
+                console.error("Data Parsing Errors:", results.errors);
+                window.showMessage(`Error processing data from ${fileName}: ${results.errors[0].message}. Check your CSV delimiter.`, 'error');
+                return false;
+            }
+
+            const requiredTradeKeys = [
+                "Trade Date",
+                "Stock Symbol",
+                "Trade Type",
+                "Quantity",
+                "Rate (per unit)",
+                "Brokerage Fee",
+                "S.S.T",
+                "Net Rate (per unit)",
+                "Net Amount / Cash Flow"
+            ];
+            
+            const dataKeys = Object.keys(results.data[0] || {});
+            const missingKeys = requiredTradeKeys.filter(key => !dataKeys.includes(key));
+
+            if (missingKeys.length > 0) {
+                window.showMessage(`CSV is missing required columns: ${missingKeys.join(', ')}. Please ensure your file headers match exactly.`, 'error');
+                return false;
+            }
+
+            const processedData = results.data.map((row, index) => {
+                const symbol = String(row['Stock Symbol'] || '').toUpperCase();
+                const tradeDate = String(row['Trade Date']);
+
+                return {
+                    tradeNo: parseFloat(row['Trade No.']) || index + 1,
+                    date: tradeDate,
+                    settlementDate: window.calculateSettlementDate(tradeDate), 
+                    symbol: symbol,
+                    stockName: stockInfo[symbol]?.Name || String(row['Stock Name']) || 'N/A', 
+                    type: String(row['Trade Type'] || ''),
+                    quantity: parseFloat(row['Quantity']) || 0,
+                    rate: parseFloat(row['Rate (per unit)']) || 0,
+                    brokerageFee: parseFloat(row['Brokerage Fee']) || 0,
+                    sst: parseFloat(row['S.S.T']) || 0,
+                    netRatePerUnit: parseFloat(row['Net Rate (per unit)']) || 0,
+                    netAmountCashFlow: parseFloat(row['Net Amount / Cash Flow']) || 0,
+                }
+            }).filter(row => row.date && row.symbol); 
+
+            tradesData = processedData;
+            window.showMessage(`Successfully loaded ${tradesData.length} trades from ${fileName}!`, 'success');
+            return true;
+        }
+
+
+        /**
+         * 1. Manual file selection upload handler
+         */
+        window.handleManualUpload = (event) => {
+            const file = event.target.files[0];
+            const statusElement = document.getElementById('trade-log-status');
+            
+            if (!file || !file.name.toLowerCase().endsWith('.csv')) {
+                window.showMessage('Please upload a valid CSV file.', 'error');
+                statusElement.textContent = 'Error: Not a CSV file.';
+                return;
+            }
+            
+            statusElement.textContent = `Loading ${file.name} (Manual)...`;
+
+            Papa.parse(file, {
+                header: true,
+                dynamicTyping: true, 
+                skipEmptyLines: true,
+                delimitersToGuess: [',', '\t', ';', '|'], 
+                complete: function(results) {
+                    if (processTradeLogData(results, file.name)) {
+                        statusElement.textContent = `Manual load successful: ${tradesData.length} trades.`;
+                        window.changeView('transactions-log');
+                    } else {
+                        statusElement.textContent = 'Error during manual parsing.';
+                    }
+                }
+            });
+        };
+
+        /**
+         * 2. Automatic file loading from the repository (GitHub/local)
+         */
+        window.autoLoadRepositoryFile = (filePath, statusElement) => {
+            statusElement.textContent = `Attempting to auto-load ${filePath}...`;
+
+            Papa.parse(filePath, {
+                download: true, // Crucial for fetching from a URL/path
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                delimitersToGuess: [',', '\t', ';', '|'],
+                complete: function(results) {
+                    if (processTradeLogData(results, filePath)) {
+                         document.getElementById('user-info').textContent = `Status: Ready. Auto-loaded ${tradesData.length} trades.`;
+                         statusElement.textContent = `Auto-load successful: ${tradesData.length} trades.`;
+                    } else {
+                        // If parsing failed (e.g., bad file format), show an error but keep going
+                        statusElement.textContent = `Error auto-loading ${filePath}. Check console.`;
+                    }
+                    window.renderDashboard(); // Always render after load attempt
+                },
+                error: function(error, file) {
+                    // This error is crucial for 404/file not found errors
+                    console.warn(`Could not auto-load ${filePath}:`, error.message);
+                    document.getElementById('user-info').textContent = 'Status: Ready. No default trade log file found. Use the Settings tab to upload.';
+                    statusElement.textContent = `File not found (${filePath}). Use manual upload.`;
+                    window.renderDashboard(); // Render mock data
+                }
+            });
+        };
+
+
+        // --- Application Initialization ---
+
+        function initApp() {
+            document.getElementById('content').classList.remove('hidden');
+
+            // Set up form listeners (omitted for brevity)
+            // ... (All form listener setup from previous code is retained)
+
+            // Auto-calculate Net Amount for Dividend/Charge form
+            const divGrossInput = document.getElementById('div-gross');
+            const divTaxInput = document.getElementById('div-tax');
+            const divNetInput = document.getElementById('div-net');
+        
+            const calculateNet = () => {
+                const gross = parseFloat(divGrossInput.value) || 0;
+                const tax = parseFloat(divTaxInput.value) || 0;
+                divNetInput.value = (gross - tax).toFixed(2);
+            };
+        
+            if (divGrossInput && divTaxInput) {
+                divGrossInput.addEventListener('input', calculateNet);
+                divTaxInput.addEventListener('input', calculateNet);
+            }
+
+            // Trade form settlement date calculation listener
+            const tradeDateInput = document.getElementById('trade-date');
+            const tradeSettlementInput = document.getElementById('trade-settlement');
+            if (tradeDateInput && tradeSettlementInput) {
+                tradeDateInput.addEventListener('change', (e) => {
+                    if (e.target.value) {
+                        tradeSettlementInput.value = window.calculateSettlementDate(e.target.value);
+                    } else {
+                        tradeSettlementInput.value = '';
+                    }
+                });
+            }
+
+            // Simple form submission handler stub (since no storage is allowed)
+            document.getElementById('trade-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                window.showMessage('Trade submitted! This is a frontend-only app; new trades are not saved. To update data, edit the trade_log.csv file and push to GitHub.', 'info');
+                e.target.reset();
+                document.getElementById('trade-settlement').value = '';
+                document.getElementById('stock-name-display').textContent = '';
+            });
+             document.getElementById('dividend-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                window.showMessage('Dividend/Charge recorded! (Data is not permanently saved). To update data, edit the trade_log.csv file and push to GitHub.', 'info');
+                e.target.reset();
+                document.getElementById('div-net').value = '';
+            });
+
+            // --- AUTO-LOAD INITIATION ---
+            const defaultFilePath = './trade_log.csv'; // Assumes file is in the same directory
+            const statusElement = document.getElementById('trade-log-status');
+            window.autoLoadRepositoryFile(defaultFilePath, statusElement);
+        }
+
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>

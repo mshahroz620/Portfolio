@@ -1,0 +1,6 @@
+﻿Trade No.,Trade Date,Settlement Date,Stock Symbol,Stock Name,Trade Type,Quantity,Rate (per unit),Brokerage Fee,S.S.T,Net Rate (per unit),Net Amount / Cash Flow
+1,22/03/2023,27/03/2023,ENGROH,Engro Holdings Limited,Buy,7,PKR 287.90,PKR 3.02,PKR 0.39,PKR 288.39,"-PKR 2,018.72"
+2,22/03/2023,27/03/2023,SYS,Systems Limited,Buy,5,PKR 464.10,PKR 3.48,PKR 0.45,PKR 464.89,"-PKR 2,324.43"
+3,22/03/2023,27/03/2023,SYS,Systems Limited,Buy,5,PKR 464.66,PKR 3.48,PKR 0.45,PKR 465.45,"-PKR 2,327.24"
+4,22/03/2023,27/03/2023,ENGROH,Engro Holdings Limited,Buy,10,PKR 287.05,PKR 4.31,PKR 0.56,PKR 287.54,"-PKR 2,875.37"
+5,29/03/2023,31/03/2023,NML,Nishat Mills Limited,Buy,2,PKR 52.40,PKR 0.16,PKR 0.02,PKR 52.49,-PKR 104.98
